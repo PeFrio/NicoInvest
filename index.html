@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valorização da Carteira de Bitcoin (USD & EUR)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap');
+    body {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Comic Neue', cursive;
+      background: linear-gradient(135deg, #f7931a 0%, #FFD700 100%);
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .card {
+      background: #FFFFFF;
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 360px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: blue;
+      text-shadow: 2px 2px #FFF;
+    }
+    .value {
+      font-size: 1.5rem;
+      margin: 0.5rem 0;
+    }
+    .profit {
+      font-size: 1.25rem;
+      margin-top: 1rem;
+      font-weight: bold;
+    }
+    .variation24h {
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+      color: #555;
+    }
+    .profit.positive { color: #16A085; }
+    .profit.negative { color: #C0392B; }
+    .variation24h.positive { color: #16A085; }
+    .variation24h.negative { color: #C0392B; }
+    .error {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #C0392B;
+    }
+    small {
+      display: block;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <!-- Carteira -->
+  <div class="card">
+    <h1>Carteira BTC do Nico</h1>
+    <div class="value" id="currentPrice">Carregando preço...</div>
+    <div class="value" id="walletValueUSD"></div>
+    <div class="profit" id="profitLoss"></div>
+    <div class="value" id="walletValueEUR"></div>
+    <div class="variation24h" id="change24h"></div>
+    <div class="error" id="errorMsg"></div>
+    <small id="updateTime">Atualizado automaticamente</small>
+  </div>
+
+  <script>
+    // Configurações de moeda
+    const VS_CURRENCY_USD = 'usd';
+    const VS_CURRENCY_EUR = 'eur';
+    const LOCALE_USD = 'en-US';
+    const LOCALE_EUR = 'pt-BR';
+    const CODE_USD = 'USD';
+    const CODE_EUR = 'EUR';
+
+    // Seu custo médio de compra em USD
+    const AVG_COST_USD = 95584;  // Defina seu valor médio de compra em USD
+    const BTC_AMOUNT = 0.0030789223;
+
+    // Inclui 24h change e preços em USD e EUR
+    const API_URL =
+      `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${VS_CURRENCY_USD},${VS_CURRENCY_EUR}&include_24hr_change=true`;
+
+    async function fetchBTCData() {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      const data = await response.json();
+      const priceUSD = data.bitcoin[VS_CURRENCY_USD];
+      const priceEUR = data.bitcoin[VS_CURRENCY_EUR];
+      const change24 = data.bitcoin[`${VS_CURRENCY_USD}_24h_change`];
+      if ([priceUSD, priceEUR, change24].some(v => typeof v !== 'number')) {
+        throw new Error('Resposta inesperada da API');
+      }
+      return { priceUSD, priceEUR, change24 };
+    }
+
+    function formatCurrency(value, locale, currency) {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
+    }
+
+    function formatPercentage(value) {
+      return `${value.toFixed(2)}%`;
+    }
+
+    async function updateDashboard() {
+      const priceEl = document.getElementById('currentPrice');
+      const walletUSDEl = document.getElementById('walletValueUSD');
+      const profitEl = document.getElementById('profitLoss');
+      const walletEUREl = document.getElementById('walletValueEUR');
+      const change24El = document.getElementById('change24h');
+      const errorEl = document.getElementById('errorMsg');
+      const timeEl = document.getElementById('updateTime');
+
+      timeEl.textContent = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}`;
+      errorEl.textContent = '';
+
+      try {
+        const { priceUSD, priceEUR, change24 } = await fetchBTCData();
+        const walletUSD = priceUSD * BTC_AMOUNT;
+        const walletEUR = priceEUR * BTC_AMOUNT;
+        const pnl = (priceUSD - AVG_COST_USD) * BTC_AMOUNT;
+        const pctChange = ((priceUSD - AVG_COST_USD) / AVG_COST_USD) * 100;
+
+        priceEl.textContent = `Preço BTC: ${formatCurrency(priceUSD, LOCALE_USD, CODE_USD)}`;
+        walletUSDEl.textContent = `Valor da Carteira (USD): ${formatCurrency(walletUSD, LOCALE_USD, CODE_USD)}`;
+
+        profitEl.textContent = `P&L: ${formatCurrency(pnl, LOCALE_USD, CODE_USD)} (${formatPercentage(pctChange)})`;
+        profitEl.classList.remove('positive', 'negative');
+        profitEl.classList.add(pnl >= 0 ? 'positive' : 'negative');
+
+        walletEUREl.textContent = `Valor da Carteira (EUR): ${formatCurrency(walletEUR, LOCALE_EUR, CODE_EUR)}`;
+
+        change24El.textContent = `24h: ${formatPercentage(change24)}`;
+        change24El.classList.remove('positive', 'negative');
+        change24El.classList.add(change24 >= 0 ? 'positive' : 'negative');
+      } catch (err) {
+        priceEl.textContent = 'Erro ao carregar dados.';
+        walletUSDEl.textContent = '';
+        profitEl.textContent = '';
+        walletEUREl.textContent = '';
+        change24El.textContent = '';
+        errorEl.textContent = err.message;
+      }
+    }
+
+    // Inicialização e atualização periódica
+    updateDashboard();
+    setInterval(updateDashboard, 60000);
+  </script>
+</body>
+</html>
